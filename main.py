@@ -84,7 +84,9 @@ def find_deburr_description():
         desc = 'Deburr'
     return desc
 
-def pm_type (str):
+def pm_type():
+    #print("Made it here")
+    #print(trav_df.loc[0,'Part Marking'])
     if 'Engraving' in trav_df.loc[0,'Part Marking']:
         return 'EGR'
     elif 'Laser' in trav_df.loc[0,'Part Marking']:
@@ -99,7 +101,8 @@ def create_queue(t_status): #create queue for all processes
     processes.append("Deburr")
 
     #if part marking says engraving, append it here
-    if('Part Marking' in trav_df.columns and pm_type == 'EGR'):
+    
+    if('Part Marking' in trav_df.columns and pm_type() == 'EGR'):
         processes.append("Part Marking")
        
     if('Finish' in trav_df.columns and trav_df.loc[0,'Finish'] != 'Standard'):
@@ -108,13 +111,11 @@ def create_queue(t_status): #create queue for all processes
     if ('Inserts' in trav_df.columns):
         processes.append("Inserts")
 
-    if ('Part Marking' in trav_df.columns and pm_type == 'LSR'):
+    if ('Part Marking' in trav_df.columns and pm_type() == 'LSR'):
         processes.append("Part Marking")
 
     processes.append("Final Inspection")
     processes.append("Bag and Tag")
-
-    
 
 def create_p_df(line_items):
     global processes
@@ -123,13 +124,13 @@ def create_p_df(line_items):
     column_names = ['Process','Description','Due Date']
     p_df = pd.DataFrame(columns = column_names)
     
-    print("Processes:",processes)
-    processes = reversed(processes) #going from last process to first process
+    #print("Processes:",processes)
+    processes_r = processes[::-1] #going from last process to first process
     #print(trav_df.columns)
    
-    for p in processes:
-        print("Process",p)
-
+    for i in range(len(processes_r)):
+        #print("Process",p)
+        p = processes_r[i]
         match p:
             case 'Bag and Tag':
                 #calculate date
@@ -154,10 +155,10 @@ def create_p_df(line_items):
 
                 #print("Day", day)
             case 'Finish':
-                p = "Plating"
+                #p = "Plating"
                 desc = trav_df.loc[0,'Finish']
                 #print out current dates, wait for input
-                print('Plating:',desc)
+                print('Finish:',desc)
                 # Print all columns except= inserts
                 if 'Inserts' in p_df['Process'].values:
                     result_df = p_df[p_df['Process'] != 'Inserts']
@@ -165,14 +166,14 @@ def create_p_df(line_items):
                 else:
                     print(p_df)
                 
-                day_str = input("Please input plating due date in the format yyyy-mm-dd: ")
-                if day_str == "":
-                    #note to highlight in red if the day is the dummy date
-                    pass #put in 01-01-2000 as a dummy date
-                if 'Inserts' in p_df['Process'].values:
-                    p_df['Process']
+                #note: will have to put input validation checking
+                day_str = input("Please input plating due date in the format yyyy-mm-dd.")
+
+
                 date_format = '%Y-%m-%d'
                 dd = datetime.strptime(day_str,date_format)
+                if 'Inserts' in p_df['Process'].values: #overwrite inserts due date with the plating date
+                    p_df.loc[p_df['Process'] == 'Inserts','Due Date'] = dd
             
             case 'Part Marking':
                 #it might include "Bag and Tag", but shouldn't include that ;note: this will have to manually reviewed since there's formatting
@@ -180,12 +181,23 @@ def create_p_df(line_items):
                 desc = trav_df.loc[0,'Part Marking']
                 desc = desc.replace("Bag and Tag","",1)
 
-                day = p_df.loc[p_df['Process'] == 'Final Inspection', 'Due Date'].values[0]
-                day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
-                dd = day - timedelta(days = 1)
-           
-
+                next_p = processes_r[i-1]
+                #print("Next process:",next_p)
+                dd = find_pm_day(next_p)
                 
+            case 'Deburr':
+                desc = find_deburr_description()
+                
+                #check process after deburring
+                next_p = processes_r[i-1]
+                print("Next process:",next_p)
+                dd = find_deburr_day(next_p)
+
+            case 'Operations':
+                dd = find_op_day()
+                desc = '' #no description for this
+
+         
             case _:
                 dd = due_date
                 desc = "Not Done Yet"
@@ -198,15 +210,62 @@ def create_p_df(line_items):
     print("Process data frame:\n",p_df)
 
 
+def find_deburr_day(next_p):
+    match next_p:
 
+        case 'Finish':
+
+            #Deburr is 1 day before plating.
+            day = p_df.loc[p_df['Process'] == 'Finish', 'Due Date'].values[0]
+            day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+            dd = day - timedelta(days = 1)
+            
+        case 'Part Marking':
+            #Deburr should be the same day as Part Marking
+            day = p_df.loc[p_df['Process'] == 'Part Marking', 'Due Date'].values[0]
+            day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+            dd = day
         
+        case 'Inserts':
+            #Deburr is same day as Inserts
+            day = p_df.loc[p_df['Process'] == 'Inserts', 'Due Date'].values[0]
+            day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+            dd = day
+        
+        case 'Final Inspection':
+            day = p_df.loc[p_df['Process'] == 'Final Inspection', 'Due Date'].values[0]
+            day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+            dd = day - timedelta(days = 2)
+    
+    return dd
+
+
+def find_pm_day(next_p):
+    #subtract one day from whatever is the next process
+    day = p_df.loc[p_df['Process'] == next_p, 'Due Date'].values[0]
+    day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+    dd = day - timedelta(days = 1)
+    return dd
+
+def find_op_day():
+    day = p_df.loc[p_df['Process'] == 'Deburr', 'Due Date'].values[0]
+    day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+    dd = day - timedelta(days = 1)
+    return dd
+     
 if __name__ == '__main__':
 
-    file_name = '0571C6E-traveler.pdf'
-    #file_name = '057531C-traveler.pdf'
+    file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
+    #file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
+    #file_name = '057531C-traveler.pdf' # OP - Deburr - Final Inspection - Bag&Tag
+    #file_name = '05695AD-traveler.pdf' # OP - Deburr - Finish - Final - Bag&Tag
+    line_items = input("Number of line items:") #note: add error checking to this
     path =  Path('jfiles',file_name)
     pdf_to_df(path)
     calculate_due_date()
     create_queue(False)
-    create_p_df(2)
+
+    #print final due date
+    print("Final Due Date: ",due_date)
+    create_p_df(int(line_items))
     create_excel()
