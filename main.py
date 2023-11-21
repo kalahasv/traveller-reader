@@ -60,7 +60,7 @@ def calculate_due_date():
     date_format = '%m/%d/%Y'
     due_date = datetime.strptime(date_num,date_format)
     timezone = date[1]
-    print("Date:",due_date)
+    #print("Date:",due_date)
 
 def format_pn():
     part = trav_df.loc[0,'Part Name']
@@ -84,22 +84,37 @@ def find_deburr_description():
         desc = 'Deburr'
     return desc
 
+def pm_type (str):
+    if 'Engraving' in trav_df.loc[0,'Part Marking']:
+        return 'EGR'
+    elif 'Laser' in trav_df.loc[0,'Part Marking']:
+        return 'LSR'
+    
 def create_queue(t_status): #create queue for all processes
     global processes
+
     if(t_status == True):
         processes.append("Turning")
     processes.append("Operations")
     processes.append("Deburr")
 
-    if ('Part Marking' in trav_df.columns and trav_df.loc[0,'Finish'] != 'Bag and Tag'):
+    #if part marking says engraving, append it here
+    if('Part Marking' in trav_df.columns and pm_type == 'EGR'):
         processes.append("Part Marking")
-
+       
     if('Finish' in trav_df.columns and trav_df.loc[0,'Finish'] != 'Standard'):
         processes.append("Finish")
+
     if ('Inserts' in trav_df.columns):
         processes.append("Inserts")
+
+    if ('Part Marking' in trav_df.columns and pm_type == 'LSR'):
+        processes.append("Part Marking")
+
     processes.append("Final Inspection")
     processes.append("Bag and Tag")
+
+    
 
 def create_p_df(line_items):
     global processes
@@ -108,9 +123,12 @@ def create_p_df(line_items):
     column_names = ['Process','Description','Due Date']
     p_df = pd.DataFrame(columns = column_names)
     
-
+    print("Processes:",processes)
     processes = reversed(processes) #going from last process to first process
+    #print(trav_df.columns)
+   
     for p in processes:
+        print("Process",p)
 
         match p:
             case 'Bag and Tag':
@@ -130,11 +148,43 @@ def create_p_df(line_items):
             case 'Inserts':
                 day = p_df.loc[p_df['Process'] == 'Final Inspection', 'Due Date'].values[0]
                 day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
-                dd = day - timedelta(days = 3)
+                dd = day - timedelta(days = 2)
 
                 desc = trav_df.loc[0,'Inserts']
 
                 #print("Day", day)
+            case 'Finish':
+                p = "Plating"
+                desc = trav_df.loc[0,'Finish']
+                #print out current dates, wait for input
+                print('Plating:',desc)
+                # Print all columns except= inserts
+                if 'Inserts' in p_df['Process'].values:
+                    result_df = p_df[p_df['Process'] != 'Inserts']
+                    print('Result', result_df)
+                else:
+                    print(p_df)
+                
+                day_str = input("Please input plating due date in the format yyyy-mm-dd: ")
+                if day_str == "":
+                    #note to highlight in red if the day is the dummy date
+                    pass #put in 01-01-2000 as a dummy date
+                if 'Inserts' in p_df['Process'].values:
+                    p_df['Process']
+                date_format = '%Y-%m-%d'
+                dd = datetime.strptime(day_str,date_format)
+            
+            case 'Part Marking':
+                #it might include "Bag and Tag", but shouldn't include that ;note: this will have to manually reviewed since there's formatting
+               
+                desc = trav_df.loc[0,'Part Marking']
+                desc = desc.replace("Bag and Tag","",1)
+
+                day = p_df.loc[p_df['Process'] == 'Final Inspection', 'Due Date'].values[0]
+                day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+                dd = day - timedelta(days = 1)
+           
+
                 
             case _:
                 dd = due_date
