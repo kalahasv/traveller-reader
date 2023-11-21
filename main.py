@@ -255,16 +255,20 @@ def find_op_day():
      
 if __name__ == '__main__':
 
-    file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
-    #file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
+    #file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
+    file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
     #file_name = '057531C-traveler.pdf' # OP - Deburr - Final Inspection - Bag&Tag
     #file_name = '05695AD-traveler.pdf' # OP - Deburr - Finish - Final - Bag&Tag
-    line_items = input("Number of line items:") #note: add error checking to this
+   
     path =  Path('jfiles',file_name)
     pdf_to_df(path)
     calculate_due_date()
     create_queue(False)
 
+    #DEBUG: print out the job id
+    #print(trav_df.columns)
+    print("JOB ID:",trav_df.loc[0,'Purchase Order'])
+    line_items = input("Number of line items:") #note: add error checking to this
     #print final due date
     print("Final Due Date: ",due_date)
     create_p_df(int(line_items))
