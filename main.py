@@ -251,22 +251,34 @@ def find_op_day():
     day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
     dd = day - timedelta(days = 1)
     return dd
+
+def find_turning_day():
+    day = p_df.loc[p_df['Process'] == 'Operations', 'Due Date'].values[0]
+    day = datetime.utcfromtimestamp(day.astype('datetime64[s]').astype(int))
+    dd = day - timedelta(days = 1)
+    return dd
      
 if __name__ == '__main__':
 
-    #file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
-    file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
+    file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
+    #file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
     #file_name = '057531C-traveler.pdf' # OP - Deburr - Final Inspection - Bag&Tag
     #file_name = '05695AD-traveler.pdf' # OP - Deburr - Finish - Final - Bag&Tag
    
+    
     path =  Path('jfiles',file_name)
     pdf_to_df(path)
     calculate_due_date()
-    create_queue(False)
-
+   
+    print("JOB ID:",trav_df.loc[0,'Purchase Order'])
+    turning_status = input("Turning? Y/N: ")
+    if turning_status == 'Y':
+        turning_status = True
+    else:
+        turning_status = False
     #DEBUG: print out the job id
     #print(trav_df.columns)
-    print("JOB ID:",trav_df.loc[0,'Purchase Order'])
+    create_queue(turning_status)
     line_items = input("Number of line items:") #note: add error checking to this
     #print final due date
     print("Final Due Date: ",due_date)
