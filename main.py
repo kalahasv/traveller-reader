@@ -197,6 +197,9 @@ def create_p_df(line_items):
                 dd = find_op_day()
                 desc = '' #no description for this
 
+            case 'Turning':
+                dd = find_turning_day()
+                desc = 'Quan'
          
             case _:
                 dd = due_date
@@ -237,7 +240,6 @@ def find_deburr_day(next_p):
             dd = day - timedelta(days = 2)
     
     return dd
-
 
 def find_pm_day(next_p):
     #subtract one day from whatever is the next process
