@@ -7,6 +7,10 @@ import tabula
 import openpyxl as op
 from openpyxl.drawing.image import Image
 from datetime import datetime, timedelta
+from create_excel import create_excel
+import PyPDF2
+import io
+from PIL import Image
 
 trav_df = None
 processes = [] #list of processes
@@ -23,32 +27,12 @@ def pdf_to_df(file_name):
         concatenated_df = pd.concat([concatenated_df,d], axis=1)
     #print(concatenated_df)
     trav_df = concatenated_df
+    if 'Ship By Date' in trav_df.columns:
+        trav_df = trav_df.rename(columns={'Ship By Date': 'Due Date'})
+    if 'Job ID' in trav_df.columns:
+        trav_df = trav_df.rename(columns={'Job ID': 'Purchase Order'})
 
-def create_excel(): #fill in the variable data
-    workbook = op.load_workbook('TRAVELER TEMPLATE.xlsx')
-    ws = workbook.active
-    #res = str(df.loc[0,'Purchase Order'])
-
-    #print( df.loc[0,'Purchase Order'])
-    ws['G4'] = trav_df.loc[0,'Purchase Order']
-    ws['G5'] = trav_df.loc[0,'Customer Part ID']
-    ws['G6'] = format_pn()
-    ws['B9'] = trav_df.loc[0,'Quantity']
-    ws['C9'] = trav_df.loc[0,'Due Date']
-    ws['B13'] = trav_df.loc[0,'Material']
-    ws['E13'] = calculate_quantity()
-    ws['D9'] = calculate_shop_due()
-
-    #first add processes to queue
-
-    workbook.save("Traveller-1.xlsx")
-
-def calculate_shop_due():
-    shop_day = due_date - timedelta(days=1)
-    shop_str = shop_day.strftime('%m/%d/%Y')
-    shop_str = shop_str + "," + timezone
-    return shop_str
-
+    #print(trav_df)
 def calculate_due_date():
     global due_date
     global timezone
@@ -62,24 +46,12 @@ def calculate_due_date():
     timezone = date[1]
     #print("Date:",due_date)
 
-def format_pn():
-    part = trav_df.loc[0,'Part Name']
-    part = part.split('.')
-    return part[0]
-
-def calculate_quantity():
-    quantity = trav_df.loc[0,'Quantity']
-    if(quantity <= 10 ):
-        shop_quantity = quantity + 1
-    else:
-        shop_quantity = quantity + 2
-
-    return shop_quantity
-
 def find_deburr_description():
     desc = ""
-    if ('Finish' in trav_df.columns and trav_df.loc[0,'Finish'] != 'Standard'):
-        desc = 'Deburr and Clean'
+    count_duplicates = (trav_df.columns == 'Finish').sum()
+    if count_duplicates == 1:
+           if (trav_df.loc[0,'Finish'] != 'Standard' or trav_df.loc[0,'Finish'] == 'As Machined'):
+            desc = 'Deburr and Clean'
     else:
         desc = 'Deburr'
     return desc
@@ -105,8 +77,11 @@ def create_queue(t_status): #create queue for all processes
     if('Part Marking' in trav_df.columns and pm_type() == 'EGR'):
         processes.append("Part Marking")
        
-    if('Finish' in trav_df.columns and trav_df.loc[0,'Finish'] != 'Standard'):
-        processes.append("Finish")
+    if('Finish' in trav_df.columns):
+        count_duplicates = (trav_df.columns == 'Finish').sum()
+        if count_duplicates == 1:
+           if (trav_df.loc[0,'Finish'] != 'Standard' and trav_df.loc[0,'Finish'] != 'As Machined'):
+            processes.append("Finish")
 
     if ('Inserts' in trav_df.columns):
         processes.append("Inserts")
@@ -123,7 +98,6 @@ def create_p_df(line_items):
     global p_df
     column_names = ['Process','Description','Due Date']
     p_df = pd.DataFrame(columns = column_names)
-    
     #print("Processes:",processes)
     processes_r = processes[::-1] #going from last process to first process
     #print(trav_df.columns)
@@ -190,7 +164,7 @@ def create_p_df(line_items):
                 
                 #check process after deburring
                 next_p = processes_r[i-1]
-                print("Next process:",next_p)
+                #print("Next process:",next_p)
                 dd = find_deburr_day(next_p)
 
             case 'Operations':
@@ -200,7 +174,7 @@ def create_p_df(line_items):
             case 'Turning':
                 dd = find_turning_day()
                 desc = 'Quan'
-         
+            
             case _:
                 dd = due_date
                 desc = "Not Done Yet"
@@ -209,8 +183,24 @@ def create_p_df(line_items):
         row = {"Process": p,"Description": desc,"Due Date":dd}
         #p_df = p_df.append(row, ignore_index=True)
         p_df.loc[len(p_df)] = row
-        
-    print("Process data frame:\n",p_df)
+
+    add_notes()
+    #print("Process data frame:\n",p_df)
+
+def add_notes():
+    global p_df
+    notes = ""
+    if 'Notes' in trav_df.columns:
+        notes = trav_df.loc[0,'Notes']
+    elif 'Internal Production Notes' in trav_df.columns:
+        notes = trav_df.loc[0,'Internal Production Notes']
+    
+    row = {"Process": 'Notes',"Description":notes,"Due Date": "N/A"}
+    p_df.loc[-1] = row
+    p_df.index = p_df.index + 1
+    p_df = p_df.sort_index()
+    #p_df.loc[len(p_df)] = row
+
 
 def find_deburr_day(next_p):
     match next_p:
@@ -260,12 +250,14 @@ def find_turning_day():
     dd = day - timedelta(days = 1)
     return dd
      
+
 if __name__ == '__main__':
 
     file_name = '0571C6E-traveler.pdf' #OP - Deburr - Finish - Inserts - PM (Laser) - Final Inspection - Bag&Tag
     #file_name = '052BD56-traveler.pdf' #OP - Deburr - PM(Engraving) - Finish - Final Inspection - Bag&Tag
     #file_name = '057531C-traveler.pdf' # OP - Deburr - Final Inspection - Bag&Tag
     #file_name = '05695AD-traveler.pdf' # OP - Deburr - Finish - Final - Bag&Tag
+    #file_name = 'E2.210.0023_Cover,_Leftmost_IPS.stp-traveler.pdf'
    
     
     path =  Path('jfiles',file_name)
@@ -285,4 +277,5 @@ if __name__ == '__main__':
     #print final due date
     print("Final Due Date: ",due_date)
     create_p_df(int(line_items))
-    create_excel()
+    
+    create_excel(trav_df,p_df,due_date)
