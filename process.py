@@ -16,6 +16,7 @@ processes = [] #list of processes
 p_df = None
 due_date = None
 timezone = None
+end_path = None
 
 def pdf_to_df(file_name):
     global trav_df
@@ -256,6 +257,7 @@ def format_file(file_name):
 
 def init(): #takes user input and generates a dataframe of processes and dates
     file_name = input("File name:")
+    #end_path = input("Destination folder:")
     path =  Path(file_name)
     pdf_to_df(path)
     calculate_due_date()
