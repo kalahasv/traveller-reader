@@ -73,7 +73,7 @@ def create_excel(trav_df,p_df,due_date): #fill in the variable data
     
     
     p_id = trav_df.loc[0,'Customer Part ID']
-    p_id = strip_non_alphanumerics(p_id)
+    p_id = strip_non_alphanumerics(str(p_id))
 
     workbook.save(p_id + ".xlsx")
 
